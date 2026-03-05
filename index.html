@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COMMANDER DATABASE | กองทัพไทย P</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;700;800&display=swap');
+        body { 
+            font-family: 'Sarabun', sans-serif; 
+            background-color: #020617; 
+        }
+        .commander-card {
+            border: 1px solid #1e293b;
+            transition: all 0.4s ease;
+        }
+        .commander-card:hover {
+            border-color: #ef4444; /* สีแดงเข้มเมื่อ Hover ให้ดูมีพลัง */
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px -10px rgba(239, 68, 68, 0.3);
+        }
+    </style>
+</head>
+<body class="text-slate-200 min-h-screen p-4 md:p-10">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-12 border-b border-slate-800 pb-10">
+            <div class="inline-block bg-red-600 text-white text-[10px] font-bold px-3 py-1 rounded mb-4 tracking-[0.3em] uppercase">
+                Commander Registry
+            </div>
+            <h1 class="text-4xl md:text-6xl font-black text-white mb-2 tracking-tighter uppercase italic">
+                ⚓ กองทัพไทย P
+            </h1>
+            <p class="text-slate-500 font-mono text-xs tracking-widest uppercase">
+                Department Commander Database System
+            </p>
+        </header>
+
+        <div class="mb-10 space-y-6 text-center">
+            <div id="unit-filters" class="flex flex-wrap justify-center gap-2 mb-6">
+                <button onclick="filterByUnit('ทั้งหมด')" class="px-5 py-2 bg-slate-800 rounded-full text-xs font-bold hover:bg-slate-700 transition">ทั้งหมด</button>
+            </div>
+        </div>
+
+        <div id="loader" class="text-center py-20">
+            <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-red-600 border-t-transparent"></div>
+        </div>
+
+        <div id="list-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://api.sheetbest.com/sheets/37f8bbbf-aada-424e-a95d-545d04eda2eb';
+        let commanderData = [];
+
+        async function init() {
+            try {
+                const response = await fetch(API_URL);
+                commanderData = await response.json();
+                
+                renderFilters();
+                renderCards(commanderData);
+                
+                document.getElementById('loader').classList.add('hidden');
+            } catch (error) {
+                console.error("Error:", error);
+                document.getElementById('loader').innerHTML = '<p class="text-red-500">DATABASE CONNECTION ERROR</p>';
+            }
+        }
+
+        function renderFilters() {
+            const container = document.getElementById('unit-filters');
+            const units = [...new Set(commanderData.map(item => item['กรม/หน่วย']))].filter(u => u);
+            
+            units.forEach(unit => {
+                const btn = document.createElement('button');
+                btn.innerText = unit;
+                btn.className = "px-5 py-2 bg-slate-900 border border-slate-800 rounded-full text-xs font-bold hover:border-red-500 transition";
+                btn.onclick = () => filterByUnit(unit);
+                container.appendChild(btn);
+            });
+        }
+
+        function filterByUnit(unitName) {
+            const filtered = unitName === 'ทั้งหมด' 
+                ? commanderData 
+                : commanderData.filter(item => item['กรม/หน่วย'] === unitName);
+            renderCards(filtered);
+        }
+
+        function renderCards(data) {
+            const container = document.getElementById('list-container');
+            container.innerHTML = data.map(m => {
+                const img = m['รูปภาพ (URL)'] || 'https://via.placeholder.com/400x500?text=NO+IMAGE';
+                
+                return `
+                <div class="commander-card bg-slate-900/60 rounded-[2rem] overflow-hidden flex flex-col group">
+                    <div class="w-full aspect-[3/4] bg-slate-950 flex items-center justify-center p-4">
+                        <img src="${img}" 
+                             class="w-full h-full object-contain drop-shadow-2xl group-hover:scale-105 transition-transform duration-500" 
+                             alt="${m['Username roblox']}">
+                    </div>
+                    
+                    <div class="p-6 text-center">
+                        <div class="mb-3">
+                            <span class="text-[9px] font-black bg-red-950/50 text-red-500 border border-red-900/50 px-3 py-1 rounded uppercase tracking-tighter">
+                                ${m['กรม/หน่วย']}
+                            </span>
+                        </div>
+                        
+                        <h2 class="text-xl font-bold text-white mb-1 uppercase tracking-tight">
+                            ${m['Username roblox']}
+                        </h2>
+                        
+                        <p class="text-slate-400 font-bold text-sm italic mb-4">
+                            ${m['ตำแหน่ง']}
+                        </p>
+                        
+                        <div class="pt-4 border-t border-slate-800/50">
+                            <span class="text-[8px] text-slate-600 font-mono tracking-widest uppercase italic">Verified Commander</span>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        init();
+    </script>
+</body>
+</html>
