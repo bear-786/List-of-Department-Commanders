@@ -13,10 +13,10 @@
         }
         .commander-card {
             border: 1px solid #1e293b;
-            transition: all 0.4s ease;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .commander-card:hover {
-            border-color: #ef4444; /* สีแดงเข้มเมื่อ Hover ให้ดูมีพลัง */
+            border-color: #ef4444;
             transform: translateY(-5px);
             box-shadow: 0 10px 30px -10px rgba(239, 68, 68, 0.3);
         }
@@ -27,7 +27,7 @@
     <div class="max-w-7xl mx-auto">
         <header class="text-center mb-12 border-b border-slate-800 pb-10">
             <div class="inline-block bg-red-600 text-white text-[10px] font-bold px-3 py-1 rounded mb-4 tracking-[0.3em] uppercase">
-                Commander Registry
+                Commander Registry (Live CSV Mode)
             </div>
             <h1 class="text-4xl md:text-6xl font-black text-white mb-2 tracking-tighter uppercase italic">
                 ⚓ กองทัพไทย P
@@ -37,38 +37,93 @@
             </p>
         </header>
 
+        <div class="max-w-md mx-auto mb-8">
+            <input type="text" id="searchInput" placeholder="พิมพ์ชื่อ Username หรือ ตำแหน่ง เพื่อค้นหา..." 
+                class="w-full bg-slate-900 border border-slate-700 rounded-2xl px-6 py-3 text-white focus:outline-none focus:border-red-500 transition shadow-xl text-sm">
+        </div>
+
         <div class="mb-10 space-y-6 text-center">
             <div id="unit-filters" class="flex flex-wrap justify-center gap-2 mb-6">
-                <button onclick="filterByUnit('ทั้งหมด')" class="px-5 py-2 bg-slate-800 rounded-full text-xs font-bold hover:bg-slate-700 transition">ทั้งหมด</button>
+                <button onclick="filterByUnit('ทั้งหมด')" id="btn-all" class="filter-btn px-5 py-2 bg-red-600 text-white rounded-full text-xs font-bold transition">ทั้งหมด</button>
             </div>
         </div>
 
         <div id="loader" class="text-center py-20">
             <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-red-600 border-t-transparent"></div>
+            <p class="text-slate-500 text-xs mt-4 font-mono">CONNECTING TO GOOGLE SHEETS LIVE DATA...</p>
         </div>
 
         <div id="list-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"></div>
     </div>
 
     <script>
-        const API_URL = 'https://api.sheetbest.com/sheets/37f8bbbf-aada-424e-a95d-545d04eda2eb';
+        // ใช้ลิงก์ Google Sheets ใหม่ที่คุณให้มาล่าสุด
+        const GOOGLE_SHEETS_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmv_6Ha4twuiZWaGY-kl9C10zpqckIAmlzxh71yy_U1Qq1STDxQ2oboRnRpPDmatiK0wGw1wAupWvV/pub?output=csv';
+        
         let commanderData = [];
+        let currentFilter = 'ทั้งหมด';
 
+        // โหลดข้อมูลสดจาก Google Sheets
         async function init() {
             try {
-                const response = await fetch(API_URL);
-                commanderData = await response.json();
+                const response = await fetch(GOOGLE_SHEETS_CSV);
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const csvText = await response.text();
+                commanderData = parseCSV(csvText);
                 
                 renderFilters();
-                renderCards(commanderData);
+                applyFilterAndSearch();
                 
                 document.getElementById('loader').classList.add('hidden');
             } catch (error) {
-                console.error("Error:", error);
-                document.getElementById('loader').innerHTML = '<p class="text-red-500">DATABASE CONNECTION ERROR</p>';
+                console.error("Error Fetching Live Sheets Data:", error);
+                document.getElementById('loader').innerHTML = `
+                    <p class="text-red-500 font-bold">⚠️ LIVE DATABASE CONNECTION FAILED</p>
+                    <p class="text-slate-500 text-xs mt-2">ไม่สามารถดึงข้อมูลจาก Google Sheets ได้ โปรดตรวจสอบการตั้งค่าการเผยแพร่</p>
+                `;
             }
         }
 
+        // ตัวแปลงรูปแบบข้อความ CSV เป็นรูปแบบฐานข้อมูล JSON
+        function parseCSV(text) {
+            const lines = text.split(/\r?\n/);
+            if (lines.length === 0 || lines[0].trim() === "") return [];
+            
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            const result = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim() === "") continue;
+                
+                const currentLine = parseCSVLine(lines[i]);
+                if (currentLine.length !== headers.length) continue;
+                
+                const obj = {};
+                headers.forEach((header, index) => {
+                    obj[header] = currentLine[index].trim().replace(/^"|"$/g, '');
+                });
+                result.push(obj);
+            }
+            return result;
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let start = 0;
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                if (line[i] === '"') inQuotes = !inQuotes;
+                else if (line[i] === ',' && !inQuotes) {
+                    result.push(line.substring(start, i));
+                    start = i + 1;
+                }
+            }
+            result.push(line.substring(start));
+            return result;
+        }
+
+        // สร้างปุ่มกรอง "กรม/หน่วย" จากข้อมูลในไฟล์จริง
         function renderFilters() {
             const container = document.getElementById('unit-filters');
             const units = [...new Set(commanderData.map(item => item['กรม/หน่วย']))].filter(u => u);
@@ -76,48 +131,96 @@
             units.forEach(unit => {
                 const btn = document.createElement('button');
                 btn.innerText = unit;
-                btn.className = "px-5 py-2 bg-slate-900 border border-slate-800 rounded-full text-xs font-bold hover:border-red-500 transition";
-                btn.onclick = () => filterByUnit(unit);
+                btn.className = "filter-btn px-5 py-2 bg-slate-900 border border-slate-800 rounded-full text-xs font-bold hover:border-red-500 transition text-slate-200";
+                btn.onclick = (e) => {
+                    setActiveButton(e.target);
+                    filterByUnit(unit);
+                };
                 container.appendChild(btn);
             });
         }
 
+        function setActiveButton(activeBtn) {
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-red-600', 'text-white');
+                btn.classList.add('bg-slate-900', 'text-slate-200', 'border-slate-800');
+            });
+            activeBtn.classList.remove('bg-slate-900', 'text-slate-200', 'border-slate-800');
+            activeBtn.classList.add('bg-red-600', 'text-white');
+        }
+
         function filterByUnit(unitName) {
-            const filtered = unitName === 'ทั้งหมด' 
-                ? commanderData 
-                : commanderData.filter(item => item['กรม/หน่วย'] === unitName);
+            currentFilter = unitName;
+            applyFilterAndSearch();
+        }
+
+        // ระบบกรองข้อมูลร่วมกับระบบค้นหา Real-time แบบไร้รอยต่อ
+        function applyFilterAndSearch() {
+            const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+            let filtered = commanderData;
+            
+            if (currentFilter !== 'ทั้งหมด') {
+                filtered = filtered.filter(item => item['กรม/หน่วย'] === currentFilter);
+            }
+            
+            if (searchQuery !== '') {
+                filtered = filtered.filter(item => {
+                    const username = (item['Username roblox'] || '').toLowerCase();
+                    const position = (item['ตำแหน่ง'] || '').toLowerCase();
+                    return username.includes(searchQuery) || position.includes(searchQuery);
+                });
+            }
+            
             renderCards(filtered);
         }
 
+        // แสดงผลการ์ดรูปแบบพรีเมียม
         function renderCards(data) {
             const container = document.getElementById('list-container');
+            
+            if (data.length === 0) {
+                container.innerHTML = '<p class="col-span-full text-center text-slate-500 py-10">❌ ไม่พบข้อมูลรายชื่อในระบบ</p>';
+                return;
+            }
+            
             container.innerHTML = data.map(m => {
                 const img = m['รูปภาพ (URL)'] || 'https://via.placeholder.com/400x500?text=NO+IMAGE';
+                const rawPosition = m['ตำแหน่ง'] || 'ไม่มีตำแหน่ง';
                 
+                // รองรับกรณีคนเดียวมีหลายตำแหน่ง แยกด้วยเครื่องหมาย / หรือ , หรือ |
+                const positionArray = rawPosition.split(/[,/|]/);
+
                 return `
                 <div class="commander-card bg-slate-900/60 rounded-[2rem] overflow-hidden flex flex-col group">
                     <div class="w-full aspect-[3/4] bg-slate-950 flex items-center justify-center p-4">
                         <img src="${img}" 
-                             class="w-full h-full object-contain drop-shadow-2xl group-hover:scale-105 transition-transform duration-500" 
-                             alt="${m['Username roblox']}">
+                             class="w-full h-full object-contain drop-shadow-2xl group-hover:scale-110 transition-transform duration-500" 
+                             alt="${m['Username roblox']}"
+                             onerror="this.src='https://via.placeholder.com/400x500?text=IMAGE+ERROR'">
                     </div>
                     
-                    <div class="p-6 text-center">
-                        <div class="mb-3">
-                            <span class="text-[9px] font-black bg-red-950/50 text-red-500 border border-red-900/50 px-3 py-1 rounded uppercase tracking-tighter">
-                                ${m['กรม/หน่วย']}
-                            </span>
+                    <div class="p-6 text-center flex-grow flex flex-col justify-between">
+                        <div>
+                            <div class="mb-3">
+                                <span class="text-[9px] font-black bg-red-950/50 text-red-500 border border-red-900/50 px-3 py-1 rounded uppercase tracking-tighter">
+                                    ${m['กรม/หน่วย']}
+                                </span>
+                            </div>
+                            
+                            <h2 class="text-xl font-bold text-white mb-2 uppercase tracking-tight">
+                                ${m['Username roblox']}
+                            </h2>
+                            
+                            <div class="flex flex-wrap gap-1.5 justify-center mb-4">
+                                ${positionArray.map(pos => `
+                                    <span class="bg-red-600/10 text-red-400 text-[10px] px-2.5 py-0.5 rounded-md border border-red-500/20 font-bold uppercase shadow-sm">
+                                        ${pos.trim()}
+                                    </span>
+                                `).join('')}
+                            </div>
                         </div>
                         
-                        <h2 class="text-xl font-bold text-white mb-1 uppercase tracking-tight">
-                            ${m['Username roblox']}
-                        </h2>
-                        
-                        <p class="text-slate-400 font-bold text-sm italic mb-4">
-                            ${m['ตำแหน่ง']}
-                        </p>
-                        
-                        <div class="pt-4 border-t border-slate-800/50">
+                        <div class="pt-4 border-t border-slate-800/50 mt-auto">
                             <span class="text-[8px] text-slate-600 font-mono tracking-widest uppercase italic">Verified Commander</span>
                         </div>
                     </div>
@@ -126,7 +229,9 @@
             }).join('');
         }
 
+        document.getElementById('searchInput').addEventListener('input', applyFilterAndSearch);
         init();
     </script>
 </body>
 </html>
+
